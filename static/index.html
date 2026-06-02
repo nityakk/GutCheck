@@ -1,0 +1,2209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GutCheck</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0908;
+    --bg-elevated: #15130f;
+    --bg-card: #1c1a16;
+    --bg-card-hover: #221f1a;
+    --ink: #f4ede0;
+    --ink-soft: #b8ad9a;
+    --ink-faint: #6e6557;
+    --accent: #d96b5a;          /* warmer, brighter terracotta — pops on dark */
+    --accent-deep: #a83e2e;
+    --accent-soft: rgba(217, 107, 90, 0.15);
+    --line: #2a2620;
+    --line-soft: #221f1a;
+    --good: #8fb070;
+    --warn: #d4a259;
+    --bad: #d96b5a;
+
+    /* category palette — tuned for dark bg */
+    --cat-gut: #d96b5a;
+    --cat-inflammation: #d4a259;
+    --cat-lethargy: #8a9cb0;
+    --cat-anxiety: #a48cbf;
+    --cat-period: #d68099;
+    --cat-other: #9a9080;
+
+    --radius: 14px;
+    --radius-sm: 8px;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 12px 36px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.4);
+    --shadow-sidebar: 12px 0 32px rgba(0, 0, 0, 0.4);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: 'Fraunces', Georgia, serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  /* warm vignette so pure black doesn't feel flat */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse at 15% 0%, rgba(217, 107, 90, 0.06) 0, transparent 50%),
+      radial-gradient(ellipse at 100% 100%, rgba(143, 176, 112, 0.03) 0, transparent 50%);
+    pointer-events: none; z-index: 0;
+  }
+
+  /* ---- layout ---- */
+  .app {
+    position: fixed; inset: 0;
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    z-index: 1;
+  }
+
+  aside {
+    background: var(--bg-elevated);
+    border-right: 1px solid var(--line);
+    box-shadow: var(--shadow-sidebar);
+    padding: 36px 22px 24px;
+    display: flex; flex-direction: column;
+    position: relative;
+    z-index: 2;
+  }
+
+  .brand {
+    margin-bottom: 44px;
+  }
+  .brand h1 {
+    font-weight: 500; font-size: 28px;
+    letter-spacing: -0.02em; margin: 0;
+    font-variation-settings: "opsz" 144;
+    color: var(--ink);
+  }
+  .brand h1 .dot { color: var(--accent); }
+  .brand .tagline {
+    font-size: 11px;
+    color: var(--ink-faint);
+    font-style: italic;
+    margin-top: 6px;
+    letter-spacing: 0.02em;
+  }
+
+  nav {
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  nav button {
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-family: inherit;
+    font-size: 15px;
+    color: var(--ink-soft);
+    padding: 10px 14px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    text-align: left;
+    display: flex; align-items: center; gap: 12px;
+    position: relative;
+    letter-spacing: -0.005em;
+  }
+  nav button:hover {
+    background: var(--bg-card);
+    color: var(--ink);
+  }
+  nav button.active {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  nav button.active::before {
+    content: '';
+    position: absolute; left: -22px; top: 50%;
+    transform: translateY(-50%);
+    width: 3px; height: 60%;
+    background: var(--accent);
+    border-radius: 0 2px 2px 0;
+  }
+  nav button .icon {
+    width: 14px; height: 14px;
+    display: inline-flex; align-items: center; justify-content: center;
+    opacity: 0.7;
+  }
+  nav button.active .icon { opacity: 1; }
+
+  .sidebar-foot {
+    margin-top: auto;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    font-size: 11px;
+    color: var(--ink-faint);
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.05em;
+  }
+  .sidebar-foot a {
+    color: var(--ink-faint);
+    text-decoration: none;
+    display: block;
+    padding: 6px 0;
+    transition: color 0.15s;
+  }
+  .sidebar-foot a:hover { color: var(--accent); }
+
+  main {
+    overflow-y: auto;
+    padding: 48px 56px 80px;
+    min-width: 0;
+  }
+  @media (max-width: 900px) {
+    main { padding: 32px 24px 60px; }
+  }
+  @media (max-width: 720px) {
+    .app { grid-template-columns: 1fr; }
+    aside {
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+      border-right: none;
+      border-bottom: 1px solid var(--line);
+      padding: 20px 24px;
+    }
+    .brand { margin-bottom: 18px; }
+    nav { flex-direction: row; gap: 4px; overflow-x: auto; }
+    nav button.active::before { display: none; }
+    .sidebar-foot { display: none; }
+  }
+
+  .page-content {
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  .page-title {
+    font-size: 28px;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    margin: 0 0 28px;
+    font-variation-settings: "opsz" 144;
+    color: var(--ink);
+  }
+  .page-title em {
+    color: var(--ink-faint);
+    font-style: italic;
+    font-weight: 300;
+    font-size: 18px;
+    margin-left: 10px;
+  }
+
+  /* ---- chat ---- */
+  .chat {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+    padding: 24px;
+    min-height: 400px;
+    display: flex; flex-direction: column;
+  }
+  .messages { flex: 1; display: flex; flex-direction: column; gap: 14px; margin-bottom: 18px; }
+  .msg {
+    max-width: 85%; padding: 12px 16px;
+    border-radius: 12px; font-size: 16px; line-height: 1.55;
+    animation: fadeUp 0.3s ease-out;
+  }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .msg.user {
+    align-self: flex-end;
+    background: var(--accent);
+    color: #1a1310;
+    font-weight: 400;
+  }
+  .msg.bot {
+    align-self: flex-start;
+    background: var(--bg-elevated);
+    border: 1px solid var(--line);
+    color: var(--ink);
+  }
+
+  .msg.confirm {
+    align-self: stretch; max-width: 100%;
+    background: var(--bg-elevated);
+    border: 1px solid var(--line);
+    color: var(--ink-soft); font-size: 14px; padding: 16px 18px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .msg.confirm > .head {
+    font-family: 'Fraunces', serif;
+    color: var(--accent); font-size: 16px;
+    margin-bottom: 12px; font-weight: 500;
+  }
+  .confirm-entry {
+    padding: 10px 0;
+    border-top: 1px dashed var(--line);
+  }
+  .confirm-entry:first-of-type { border-top: none; padding-top: 4px; }
+  .confirm-entry .field { display: flex; gap: 10px; margin: 3px 0; }
+  .confirm-entry .field span:first-child { color: var(--ink-faint); min-width: 86px; }
+  .confirm-entry .field span:last-child { flex: 1; word-break: break-word; color: var(--ink); }
+
+  .empty-state {
+    text-align: center; color: var(--ink-faint);
+    padding: 40px 20px; font-style: italic; font-size: 15px;
+    line-height: 1.7;
+  }
+
+  .input-row {
+    display: flex; gap: 10px; align-items: flex-end;
+    padding-top: 14px; border-top: 1px solid var(--line-soft);
+  }
+  textarea {
+    flex: 1; resize: none;
+    border: 1px solid var(--line); background: var(--bg-elevated);
+    border-radius: 10px; padding: 12px 14px;
+    font-family: inherit; font-size: 16px; color: var(--ink);
+    line-height: 1.4; transition: border-color 0.15s;
+    min-height: 44px; max-height: 220px;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  textarea::placeholder { color: var(--ink-faint); font-style: italic; }
+
+  button.send {
+    background: var(--accent); color: #1a1310; border: none;
+    border-radius: 10px; padding: 12px 20px;
+    font-family: inherit; font-size: 15px; cursor: pointer;
+    transition: all 0.15s; letter-spacing: 0.01em; height: 44px;
+    font-weight: 500;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.1) inset, var(--shadow-sm);
+  }
+  button.send:hover:not(:disabled) {
+    background: #e07a6a;
+    transform: translateY(-1px);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.1) inset, var(--shadow-md);
+  }
+  button.send:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .thinking {
+    display: inline-flex; gap: 4px; align-items: center;
+    padding: 12px 16px; background: var(--bg-elevated);
+    border: 1px solid var(--line);
+    border-radius: 12px; align-self: flex-start;
+  }
+  .thinking span {
+    width: 6px; height: 6px; background: var(--ink-soft);
+    border-radius: 50%; animation: pulse 1.2s infinite ease-in-out;
+  }
+  .thinking span:nth-child(2) { animation-delay: 0.2s; }
+  .thinking span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes pulse {
+    0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+    40% { opacity: 1; transform: scale(1); }
+  }
+
+  /* ---- history ---- */
+  .day-group { margin-bottom: 26px; }
+  .day-header {
+    display: flex; align-items: baseline; gap: 12px;
+    margin-bottom: 12px; padding: 0 4px;
+  }
+  .day-date {
+    font-size: 22px; font-weight: 500; letter-spacing: -0.01em;
+    font-variation-settings: "opsz" 144;
+    color: var(--ink);
+  }
+  .day-weekday {
+    font-size: 11px; color: var(--ink-faint);
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  .day-count {
+    margin-left: auto;
+    font-size: 11px; color: var(--ink-faint);
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.05em;
+  }
+
+  .entry {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    margin-bottom: 8px;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.18s ease;
+  }
+  .entry:hover {
+    background: var(--bg-card-hover);
+    border-color: #3a352c;
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+  }
+  .entry-head {
+    display: flex; justify-content: space-between;
+    align-items: center; gap: 10px; margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .entry-head-left { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .entry-time {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .cat-badge {
+    font-size: 11px; padding: 2px 9px; border-radius: 100px;
+    font-family: 'JetBrains Mono', monospace; letter-spacing: 0.03em;
+    text-transform: lowercase;
+    color: #1a1310;
+    font-weight: 500;
+    background: var(--cat-other);
+  }
+  .cat-gut { background: var(--cat-gut); }
+  .cat-inflammation { background: var(--cat-inflammation); }
+  .cat-lethargy { background: var(--cat-lethargy); }
+  .cat-anxiety { background: var(--cat-anxiety); }
+  .cat-period { background: var(--cat-period); }
+  .cat-other { background: var(--cat-other); }
+
+  .severity-pill {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    padding: 2px 9px; border-radius: 100px; font-weight: 500;
+  }
+  .sev-low { background: rgba(143, 176, 112, 0.15); color: var(--good); }
+  .sev-mid { background: rgba(212, 162, 89, 0.15); color: var(--warn); }
+  .sev-high { background: rgba(217, 107, 90, 0.15); color: var(--bad); }
+
+  .entry-symptoms {
+    font-size: 17px; font-weight: 500; margin-bottom: 4px;
+    letter-spacing: -0.005em;
+    color: var(--ink);
+  }
+  .entry-meta {
+    font-size: 13px; color: var(--ink-soft);
+    display: flex; flex-wrap: wrap; gap: 4px 14px;
+    margin-top: 6px;
+  }
+  .entry-meta span strong {
+    color: var(--ink-faint); font-weight: 400;
+    font-style: italic; margin-right: 4px;
+  }
+  .entry-raw {
+    margin-top: 10px; padding-top: 10px;
+    border-top: 1px dashed var(--line);
+    font-size: 13px; color: var(--ink-faint); font-style: italic;
+  }
+  .entry-delete {
+    background: transparent; border: none; color: var(--ink-faint);
+    font-size: 10px; cursor: pointer; padding: 4px 8px;
+    font-family: 'JetBrains Mono', monospace; letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-radius: 4px;
+    transition: all 0.15s;
+  }
+  .entry-delete:hover { color: var(--bad); background: rgba(217, 107, 90, 0.08); }
+
+  /* ---- calendar ---- */
+  .cal-page { max-width: 920px; }
+  .cal-header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 18px; gap: 16px;
+  }
+  .cal-title { margin: 0; }
+  .cal-title em {
+    color: var(--ink-soft); font-style: italic; font-weight: 400;
+    font-size: 22px; margin-left: 12px;
+    font-variation-settings: "opsz" 144;
+  }
+  .cal-nav { display: flex; gap: 4px; align-items: center; }
+  .cal-nav-btn {
+    background: var(--bg-card); border: 1px solid var(--line);
+    color: var(--ink-soft); border-radius: 8px;
+    font-family: inherit; font-size: 16px; cursor: pointer;
+    width: 36px; height: 36px;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .cal-nav-btn:hover { color: var(--accent); border-color: var(--accent); }
+  .cal-today-btn { width: auto; padding: 0 14px; font-size: 13px; }
+
+  .cal-card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+    padding: 16px;
+    overflow: hidden;
+  }
+  .cal-weekdays {
+    display: grid; grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .cal-weekdays > div {
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ink-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 6px 0;
+  }
+
+  .cal-weeks {
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .cal-week {
+    display: grid; grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+    position: relative;
+    min-height: 90px;
+  }
+  .cal-day {
+    background: var(--bg-elevated);
+    border: 1px solid var(--line-soft);
+    border-radius: 8px;
+    padding: 26px 6px 6px;   /* top padding leaves room for period bar */
+    min-height: 90px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex; flex-direction: column;
+    position: relative;
+    overflow: hidden;
+  }
+  .cal-day:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--line);
+    transform: translateY(-1px);
+  }
+  .cal-day.other-month {
+    opacity: 0.35;
+  }
+  .cal-day.today {
+    border-color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+  .cal-day-num {
+    position: absolute;
+    top: 6px; right: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-soft);
+    font-weight: 500;
+  }
+  .cal-day.today .cal-day-num { color: var(--accent); }
+
+  .cal-chips {
+    display: flex; flex-direction: column; gap: 3px;
+    margin-top: 2px;
+  }
+  .cal-chip {
+    font-size: 10px;
+    line-height: 1.25;
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: #1a1310;
+    font-weight: 500;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.02em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cal-chip.cat-gut { background: var(--cat-gut); }
+  .cal-chip.cat-inflammation { background: var(--cat-inflammation); }
+  .cal-chip.cat-lethargy { background: var(--cat-lethargy); }
+  .cal-chip.cat-anxiety { background: var(--cat-anxiety); }
+  .cal-chip.cat-period { background: var(--cat-period); }
+  .cal-chip.cat-other { background: var(--cat-other); }
+  .cal-chip-overflow {
+    font-size: 10px; color: var(--ink-faint);
+    font-family: 'JetBrains Mono', monospace;
+    padding: 0 6px;
+  }
+
+  /* period bars sit absolutely positioned above day cells */
+  .cal-period-bar {
+    position: absolute;
+    top: 4px;
+    height: 18px;
+    background: linear-gradient(90deg, var(--cat-period), #c66f88);
+    border-radius: 4px;
+    color: #1a1310;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    line-height: 18px;
+    padding: 0 8px;
+    letter-spacing: 0.04em;
+    z-index: 2;
+    overflow: hidden;
+    white-space: nowrap;
+    pointer-events: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+  .cal-period-bar.continues-left { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+  .cal-period-bar.continues-right { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  .cal-period-bar.ongoing::after {
+    content: '⟶';
+    margin-left: 4px;
+  }
+
+  .cal-legend {
+    display: flex; flex-wrap: wrap; gap: 14px;
+    margin-top: 18px; padding: 0 4px;
+    font-size: 12px; color: var(--ink-faint);
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.04em;
+  }
+  .cal-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+  .cal-legend-chip {
+    width: 10px; height: 10px; border-radius: 3px;
+    display: inline-block;
+  }
+  .cal-legend-period { background: var(--cat-period); }
+
+  /* day-detail side panel */
+  .day-panel {
+    position: fixed; inset: 0;
+    z-index: 100;
+  }
+  .day-panel-backdrop {
+    position: absolute; inset: 0;
+    background: rgba(10, 9, 8, 0.6);
+    backdrop-filter: blur(2px);
+    animation: fadeIn 0.2s ease-out;
+  }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .day-panel-inner {
+    position: absolute; top: 0; right: 0; bottom: 0;
+    width: 420px; max-width: 90vw;
+    background: var(--bg-elevated);
+    border-left: 1px solid var(--line);
+    box-shadow: -12px 0 32px rgba(0, 0, 0, 0.5);
+    padding: 24px 28px;
+    overflow-y: auto;
+    animation: slideIn 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+  .day-panel-close {
+    position: absolute; top: 14px; right: 14px;
+    background: transparent; border: none;
+    color: var(--ink-soft); font-size: 26px;
+    cursor: pointer; line-height: 1;
+    width: 32px; height: 32px; border-radius: 6px;
+    transition: all 0.15s;
+  }
+  .day-panel-close:hover { color: var(--accent); background: var(--bg-card); }
+  .day-panel h3 {
+    font-family: 'Fraunces', serif;
+    font-weight: 500; font-size: 22px;
+    letter-spacing: -0.01em; margin: 0 0 4px;
+    color: var(--ink);
+    font-variation-settings: "opsz" 144;
+  }
+  .day-panel .day-panel-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; color: var(--ink-faint);
+    text-transform: uppercase; letter-spacing: 0.1em;
+    margin-bottom: 20px;
+  }
+  .day-panel .entry { margin-bottom: 10px; }
+  .day-panel .period-info {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--cat-period);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+  .day-panel .period-info strong {
+    display: block;
+    color: var(--cat-period);
+    font-family: 'Fraunces', serif;
+    font-size: 15px;
+    margin-bottom: 4px;
+  }
+  .day-panel .empty-state { padding: 20px 0; }
+
+  @media (max-width: 720px) {
+    .cal-day { min-height: 70px; padding-top: 22px; }
+    .cal-week { min-height: 70px; }
+    .cal-chip { font-size: 9px; padding: 1px 4px; }
+    .day-panel-inner { width: 100%; }
+  }
+
+  /* ---- edit entry modal ---- */
+  .edit-modal { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; }
+  .edit-modal.hidden { display: none; }
+  .edit-modal-backdrop {
+    position: absolute; inset: 0;
+    background: rgba(10, 9, 8, 0.78);
+    backdrop-filter: blur(3px);
+  }
+  .edit-modal-inner {
+    position: relative; z-index: 1;
+    width: 500px; max-width: 95vw; max-height: 90vh;
+    background: var(--bg-elevated);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    padding: 28px 30px 24px;
+    overflow-y: auto;
+  }
+  .edit-modal-inner h3 {
+    font-family: 'Fraunces', serif; font-weight: 500; font-size: 20px;
+    letter-spacing: -0.01em; margin: 0 0 20px; color: var(--ink);
+    font-variation-settings: "opsz" 144;
+  }
+  .edit-field { margin-bottom: 14px; }
+  .edit-field label {
+    display: block;
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.09em;
+    color: var(--ink-faint); margin-bottom: 5px;
+  }
+  .edit-hint { text-transform: none; letter-spacing: 0; opacity: 0.7; }
+  .edit-field input, .edit-field select, .edit-field textarea {
+    width: 100%; background: var(--bg-card); border: 1px solid var(--line);
+    border-radius: var(--radius-sm); color: var(--ink);
+    font-family: 'Fraunces', serif; font-size: 14px;
+    padding: 8px 11px; outline: none; transition: border-color 0.15s;
+  }
+  .edit-field input:focus, .edit-field select:focus, .edit-field textarea:focus {
+    border-color: var(--accent);
+  }
+  .edit-field select option { background: var(--bg-elevated); }
+  .edit-field textarea { resize: vertical; }
+  .edit-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .edit-actions {
+    display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end;
+    border-top: 1px solid var(--line); padding-top: 16px;
+  }
+  .edit-save-btn {
+    background: var(--accent); color: #fff; border: none;
+    padding: 8px 20px; border-radius: var(--radius-sm);
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    cursor: pointer; transition: background 0.15s;
+  }
+  .edit-save-btn:hover { background: var(--accent-deep); }
+  .edit-cancel-btn {
+    background: transparent; color: var(--ink-faint); border: none;
+    padding: 8px 14px; cursor: pointer;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    border-radius: var(--radius-sm); transition: color 0.15s;
+  }
+  .edit-cancel-btn:hover { color: var(--ink); }
+  .entry-head-actions { display: flex; gap: 4px; }
+
+  /* ---- stats ---- */
+  .stat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 22px 24px;
+    box-shadow: var(--shadow-md);
+    margin-bottom: 14px;
+  }
+  .stat-card h3 {
+    font-size: 11px; color: var(--ink-faint); margin: 0 0 16px;
+    text-transform: uppercase; letter-spacing: 0.12em; font-weight: 500;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .card-sub {
+    font-size: 12px; color: var(--ink-faint);
+    line-height: 1.5; margin: -10px 0 16px;
+    font-style: italic;
+    max-width: 56ch;
+  }
+  .stat-list .item-row {
+    display: flex; align-items: center; gap: 8px; flex: 1;
+  }
+  .kind-pill {
+    font-size: 9px; padding: 1px 6px;
+    border-radius: 100px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background: var(--line);
+    color: var(--ink-faint);
+  }
+  .kind-pill.kind-trigger { background: rgba(217, 107, 90, 0.15); color: var(--accent); }
+  .kind-pill.kind-food { background: rgba(143, 176, 112, 0.12); color: var(--good); }
+
+  /* ---- documents ---- */
+  .upload-row {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    margin-top: 4px;
+  }
+  .upload-row input[type=file],
+  .upload-row select,
+  .upload-row input[type=date] {
+    background: var(--bg-elevated);
+    border: 1px solid var(--line);
+    color: var(--ink); border-radius: 8px;
+    padding: 9px 12px;
+    font-family: inherit; font-size: 13px;
+  }
+  .upload-row input[type=file] { padding: 7px 10px; }
+  .upload-row input[type=file]::file-selector-button {
+    background: var(--bg-card); border: 1px solid var(--line);
+    color: var(--ink-soft); border-radius: 6px; padding: 6px 10px;
+    font-family: inherit; font-size: 12px; cursor: pointer;
+    margin-right: 10px;
+  }
+  .upload-row select:focus, .upload-row input:focus { outline: none; border-color: var(--accent); }
+  .upload-status {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px; color: var(--ink-faint);
+    margin-top: 14px; min-height: 1em;
+  }
+  .upload-status.error { color: var(--bad); }
+  .upload-status.success { color: var(--good); }
+
+  .doc-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--line-soft);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 8px;
+    display: flex; gap: 14px; align-items: flex-start;
+  }
+  .doc-card-main { flex: 1; min-width: 0; }
+  .doc-card-title {
+    font-size: 15px; font-weight: 500; letter-spacing: -0.005em;
+    color: var(--ink); margin-bottom: 4px;
+  }
+  .doc-card-summary {
+    font-size: 13px; color: var(--ink-soft);
+    line-height: 1.55; margin-bottom: 8px;
+    font-style: italic;
+  }
+  .doc-card-meta {
+    font-size: 11px; color: var(--ink-faint);
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.06em;
+    display: flex; gap: 12px; flex-wrap: wrap;
+  }
+  .doc-type-pill {
+    font-size: 10px; padding: 2px 8px;
+    border-radius: 100px; letter-spacing: 0.05em;
+    background: var(--bg-card); color: var(--ink-soft);
+    border: 1px solid var(--line);
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: lowercase;
+  }
+
+  /* ---- agent chat extras ---- */
+  .agent-trace {
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: var(--bg-elevated);
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-faint);
+    letter-spacing: 0.02em;
+  }
+  .agent-trace-step {
+    display: flex; gap: 8px; align-items: center;
+    padding: 3px 0;
+  }
+  .agent-trace-step .agent-name {
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 10px;
+    min-width: 78px;
+  }
+  .citations {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--line);
+  }
+  .citations-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ink-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 8px;
+  }
+  .citation {
+    background: var(--bg-elevated);
+    border: 1px solid var(--line-soft);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+  .citation-head {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--ink);
+    font-size: 11px;
+    margin-bottom: 4px;
+    letter-spacing: 0.04em;
+  }
+  .citation-snippet {
+    font-style: italic;
+    line-height: 1.4;
+    color: var(--ink-faint);
+  }
+  .stats-grid-two {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+  }
+  @media (max-width: 640px) { .stats-grid-two { grid-template-columns: 1fr; } }
+  .stat-big {
+    font-size: 42px; font-weight: 500;
+    letter-spacing: -0.02em; font-variation-settings: "opsz" 144;
+    line-height: 1;
+    color: var(--ink);
+  }
+  .stat-big-sub {
+    font-size: 11px; color: var(--ink-faint); margin-top: 6px;
+    font-family: 'JetBrains Mono', monospace; letter-spacing: 0.05em;
+  }
+
+  .stat-list { list-style: none; padding: 0; margin: 0; }
+  .stat-list li {
+    display: flex; justify-content: space-between;
+    padding: 8px 0; border-bottom: 1px solid var(--line-soft);
+    font-size: 14px;
+    color: var(--ink);
+  }
+  .stat-list li:last-child { border-bottom: none; }
+  .stat-list .count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px; color: var(--ink-faint);
+  }
+
+  .chart-wrap { position: relative; height: 240px; }
+  .chart-wrap.short { height: 180px; }
+
+  .actions { display: flex; gap: 10px; margin-top: 20px; }
+  .btn-ghost {
+    background: transparent; color: var(--ink-soft);
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 16px; cursor: pointer;
+    font-family: inherit; font-size: 13px;
+    text-decoration: none; display: inline-block;
+    transition: all 0.15s;
+  }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+  .hidden { display: none !important; }
+
+  /* scrollbar polish */
+  main::-webkit-scrollbar { width: 8px; }
+  main::-webkit-scrollbar-track { background: transparent; }
+  main::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+  main::-webkit-scrollbar-thumb:hover { background: #3a352c; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="brand">
+      <h1>GutCheck<span class="dot">.</span></h1>
+      <div class="tagline">a gentle log for difficult days</div>
+    </div>
+    <nav>
+      <button id="nav-log" class="active" onclick="switchView('log')">
+        <span class="icon">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h12M2 8h12M2 13h7"/></svg>
+        </span>
+        log
+      </button>
+      <button id="nav-history" onclick="switchView('history')">
+        <span class="icon">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 6h12M5 1.5v3M11 1.5v3"/></svg>
+        </span>
+        history
+      </button>
+      <button id="nav-stats" onclick="switchView('stats')">
+        <span class="icon">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 13V3M2 13h12M5 10V8M8 10V5M11 10V7"/></svg>
+        </span>
+        trends
+      </button>
+      <button id="nav-docs" onclick="switchView('docs')">
+        <span class="icon">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 1.5h6l3 3v10a.5.5 0 0 1-.5.5h-8.5a.5.5 0 0 1-.5-.5v-12.5a.5.5 0 0 1 .5-.5z"/><path d="M9.5 1.5v3h3M5 8h6M5 10.5h6M5 13h4"/></svg>
+        </span>
+        documents
+      </button>
+      <button id="nav-chat" onclick="switchView('chat')">
+        <span class="icon">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 11.5V3.5a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H6l-3 3v-3.5z"/><circle cx="6" cy="7" r="0.5" fill="currentColor"/><circle cx="9" cy="7" r="0.5" fill="currentColor"/></svg>
+        </span>
+        assistant
+      </button>
+    </nav>
+    <div class="sidebar-foot">
+      <a href="/api/export.csv">↓ export csv</a>
+    </div>
+  </aside>
+
+  <main>
+    <!-- LOG VIEW -->
+    <section id="view-log">
+      <div class="page-content">
+        <h2 class="page-title">log<em>what's going on?</em></h2>
+        <div class="chat">
+          <div class="messages" id="messages">
+            <div class="empty-state" id="empty-state">
+              Say what's going on — when it happened, how it felt, what you ate.<br/>
+              You can include multiple days in one go. I'll ask if I need more.
+            </div>
+          </div>
+          <div class="input-row">
+            <textarea id="input" placeholder="e.g. yesterday had bad cramping after pizza, today felt foggy all morning…" rows="1"></textarea>
+            <button class="send" id="send-btn" onclick="sendMessage()">send</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- HISTORY VIEW -->
+    <section id="view-history" class="hidden">
+      <div class="page-content cal-page">
+        <div class="cal-header">
+          <h2 class="page-title cal-title">history<em id="cal-month-label"></em></h2>
+          <div class="cal-nav">
+            <button class="cal-nav-btn" onclick="changeMonth(-1)" aria-label="Previous month">‹</button>
+            <button class="cal-nav-btn cal-today-btn" onclick="goToToday()">today</button>
+            <button class="cal-nav-btn" onclick="changeMonth(1)" aria-label="Next month">›</button>
+          </div>
+        </div>
+
+        <div class="cal-card">
+          <div class="cal-weekdays">
+            <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div>
+            <div>Thu</div><div>Fri</div><div>Sat</div>
+          </div>
+          <div class="cal-weeks" id="cal-weeks"></div>
+        </div>
+
+        <div class="cal-legend">
+          <span class="cal-legend-item"><span class="cal-legend-chip cat-gut"></span>gut</span>
+          <span class="cal-legend-item"><span class="cal-legend-chip cat-inflammation"></span>inflammation</span>
+          <span class="cal-legend-item"><span class="cal-legend-chip cat-lethargy"></span>lethargy</span>
+          <span class="cal-legend-item"><span class="cal-legend-chip cat-anxiety"></span>anxiety</span>
+          <span class="cal-legend-item"><span class="cal-legend-chip cat-other"></span>other</span>
+          <span class="cal-legend-item"><span class="cal-legend-chip cal-legend-period"></span>period</span>
+        </div>
+      </div>
+
+      <!-- Day-detail side panel -->
+      <div id="day-panel" class="day-panel hidden">
+        <div class="day-panel-backdrop" onclick="closeDayPanel()"></div>
+        <aside class="day-panel-inner">
+          <button class="day-panel-close" onclick="closeDayPanel()" aria-label="Close">×</button>
+          <div id="day-panel-content"></div>
+        </aside>
+      </div>
+
+      <!-- Edit entry modal -->
+      <div id="edit-modal" class="edit-modal hidden">
+        <div class="edit-modal-backdrop" onclick="closeEditModal()"></div>
+        <div class="edit-modal-inner">
+          <button class="day-panel-close" onclick="closeEditModal()" aria-label="Close" style="position:absolute;top:12px;right:12px">×</button>
+          <h3>edit entry</h3>
+
+          <div class="edit-field">
+            <label>Category</label>
+            <select id="edit-category">
+              <option value="gut">gut</option>
+              <option value="inflammation">inflammation</option>
+              <option value="lethargy">lethargy</option>
+              <option value="anxiety">anxiety</option>
+              <option value="period">period</option>
+              <option value="other">other</option>
+            </select>
+          </div>
+
+          <div class="edit-field">
+            <label>Symptoms <span class="edit-hint">(comma-separated)</span></label>
+            <input type="text" id="edit-symptoms" placeholder="cramping, bloating">
+          </div>
+
+          <div class="edit-field">
+            <label>Severity <span class="edit-hint">(1–10)</span></label>
+            <input type="number" id="edit-severity" min="1" max="10" placeholder="5">
+          </div>
+
+          <div class="edit-row">
+            <div class="edit-field">
+              <label>Start date</label>
+              <input type="date" id="edit-occurred">
+            </div>
+            <div class="edit-field">
+              <label>End date <span class="edit-hint">(optional)</span></label>
+              <input type="date" id="edit-end-date">
+            </div>
+          </div>
+
+          <div class="edit-field">
+            <label>Foods <span class="edit-hint">(comma-separated)</span></label>
+            <input type="text" id="edit-foods" placeholder="pasta, bread">
+          </div>
+
+          <div class="edit-field">
+            <label>Triggers <span class="edit-hint">(comma-separated)</span></label>
+            <input type="text" id="edit-triggers" placeholder="stress, dairy">
+          </div>
+
+          <div class="edit-row">
+            <div class="edit-field">
+              <label>Location</label>
+              <input type="text" id="edit-location" placeholder="lower left">
+            </div>
+            <div class="edit-field">
+              <label>Duration</label>
+              <input type="text" id="edit-duration" placeholder="2 hours">
+            </div>
+          </div>
+
+          <div class="edit-field">
+            <label>Notes</label>
+            <textarea id="edit-notes" rows="3" placeholder="anything else…"></textarea>
+          </div>
+
+          <div class="edit-actions">
+            <button class="edit-cancel-btn" onclick="closeEditModal()">cancel</button>
+            <button class="edit-save-btn" onclick="saveEditEntry()">save changes</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STATS VIEW -->
+    <section id="view-stats" class="hidden">
+      <div class="page-content">
+        <h2 class="page-title">trends<em>last 60 days</em></h2>
+        <div class="stat-card">
+          <h3>gut issue severity</h3>
+          <div class="chart-wrap"><canvas id="chart-gut"></canvas></div>
+        </div>
+
+        <div class="stat-card">
+          <h3>what triggers your worst days</h3>
+          <div class="card-sub" id="corr-sub">
+            Avg gut severity on days you ate / suspected each item (incl. next-day),
+            vs your baseline. Last 90 days, min 2 occurrences.
+          </div>
+          <div class="chart-wrap" id="chart-corr-wrap" style="height: auto; min-height: 80px;">
+            <canvas id="chart-correlations"></canvas>
+          </div>
+          <div id="corr-empty" class="empty-state hidden" style="padding: 20px 0;">
+            Not enough data yet — log a few weeks of foods and gut symptoms to see patterns.
+          </div>
+        </div>
+
+        <div class="stats-grid-two">
+          <div class="stat-card">
+            <h3>entries logged</h3>
+            <div class="stat-big" id="stat-count">—</div>
+            <div class="stat-big-sub" id="stat-count-sub"></div>
+          </div>
+          <div class="stat-card">
+            <h3>by category</h3>
+            <div class="chart-wrap short"><canvas id="chart-categories"></canvas></div>
+          </div>
+        </div>
+
+        <div class="stats-grid-two">
+          <div class="stat-card">
+            <h3>top foods · most logged</h3>
+            <ul class="stat-list" id="stat-foods"></ul>
+          </div>
+          <div class="stat-card">
+            <h3>calm-day foods</h3>
+            <div class="card-sub">Items that appear most on your better days.</div>
+            <ul class="stat-list" id="stat-calm"></ul>
+          </div>
+        </div>
+
+        <div class="stats-grid-two">
+          <div class="stat-card">
+            <h3>top triggers · most suspected</h3>
+            <ul class="stat-list" id="stat-triggers"></ul>
+          </div>
+          <div class="stat-card">
+            <h3>top symptoms</h3>
+            <ul class="stat-list" id="stat-symptoms"></ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DOCUMENTS VIEW -->
+    <section id="view-docs" class="hidden">
+      <div class="page-content">
+        <h2 class="page-title">documents<em>your health corpus</em></h2>
+
+        <div class="stat-card">
+          <h3>upload a document</h3>
+          <div class="card-sub">
+            PDFs (lab results, doctor notes), or plain text (journal entries, articles).
+            Chunked, embedded, and searchable by the assistant.
+          </div>
+          <div class="upload-row">
+            <input type="file" id="upload-file" accept=".pdf,.txt,.md" />
+            <select id="upload-type">
+              <option value="text">text / journal</option>
+              <option value="pdf">pdf</option>
+              <option value="lab">lab result</option>
+              <option value="doctor_note">doctor note</option>
+              <option value="article">article</option>
+            </select>
+            <input type="date" id="upload-date" placeholder="document date" />
+            <button class="send" id="upload-btn" onclick="uploadDocument()">upload</button>
+          </div>
+          <div id="upload-status" class="upload-status"></div>
+        </div>
+
+        <div class="stat-card">
+          <h3>indexed documents</h3>
+          <div id="docs-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ASSISTANT (multi-agent chat) -->
+    <section id="view-chat" class="hidden">
+      <div class="page-content">
+        <h2 class="page-title">assistant<em>ask about your data</em></h2>
+
+        <div class="chat" id="agent-chat">
+          <div class="messages" id="agent-messages">
+            <div class="empty-state" id="agent-empty">
+              Ask about your logs and documents.<br/>
+              Examples: <em>"What's been my worst week recently?"</em> ·
+              <em>"What did my last lab say about my iron?"</em> ·
+              <em>"Are my symptoms worse during my period?"</em>
+            </div>
+          </div>
+          <div class="input-row">
+            <textarea id="agent-input" placeholder="ask anything about your health data…" rows="1"></textarea>
+            <button class="send" id="agent-send" onclick="sendAgentMessage()">ask</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+const CATEGORY_COLORS = {
+  gut: '#d96b5a',
+  inflammation: '#d4a259',
+  lethargy: '#8a9cb0',
+  anxiety: '#a48cbf',
+  period: '#d68099',
+  other: '#9a9080',
+};
+
+let sessionId = null;
+let isLoading = false;
+let chartGut = null;
+let chartCategories = null;
+let chartCorrelations = null;
+
+const input = document.getElementById('input');
+const sendBtn = document.getElementById('send-btn');
+const messages = document.getElementById('messages');
+const emptyState = document.getElementById('empty-state');
+
+input.addEventListener('input', () => {
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 220) + 'px';
+});
+input.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+function addMessage(text, cls) {
+  if (emptyState && emptyState.parentNode) emptyState.remove();
+  const div = document.createElement('div');
+  div.className = 'msg ' + cls;
+  div.textContent = text;
+  messages.appendChild(div);
+  messages.scrollIntoView({ block: 'end', behavior: 'smooth' });
+}
+
+function fmtWhen(iso) {
+  if (!iso) return 'just now';
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return d.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+function addConfirmation(entries, periods, message) {
+  if (emptyState && emptyState.parentNode) emptyState.remove();
+  const div = document.createElement('div');
+  div.className = 'msg confirm';
+
+  const nE = entries.length;
+  const nP = periods.length;
+  const parts = [];
+  if (nE > 0) parts.push(`${nE} ${nE === 1 ? 'entry' : 'entries'}`);
+  if (nP > 0) parts.push(`${nP} period`);
+  const headText = (nE + nP) === 0
+    ? `✓ ${message || 'noted'}`
+    : `✓ logged ${parts.join(' + ')} — ${message || ''}`;
+
+  let html = `<div class="head">${escapeHtml(headText)}</div>`;
+  entries.forEach(e => {
+    const fields = [
+      ['category', e.category || '—'],
+      ['when', fmtWhen(e.occurred_at)],
+      ['symptoms', (e.symptoms || []).join(', ') || '—'],
+      ['severity', e.severity != null ? e.severity + '/10' : '—'],
+      ['foods', (e.foods || []).join(', ') || '—'],
+      ['triggers', (e.triggers || []).join(', ') || '—'],
+    ];
+    if (e.location) fields.push(['location', e.location]);
+    if (e.duration) fields.push(['duration', e.duration]);
+    html += '<div class="confirm-entry">' +
+      fields.map(([k, v]) => `<div class="field"><span>${k}</span><span>${escapeHtml(v)}</span></div>`).join('') +
+      '</div>';
+  });
+  periods.forEach(p => {
+    const fields = [
+      ['type', 'period'],
+      ['start', p.start_date || '—'],
+      ['end', p.end_date || 'ongoing'],
+    ];
+    if (p.flow) fields.push(['flow', p.flow]);
+    if (p.notes) fields.push(['notes', p.notes]);
+    html += '<div class="confirm-entry">' +
+      fields.map(([k, v]) => `<div class="field"><span>${k}</span><span>${escapeHtml(v)}</span></div>`).join('') +
+      '</div>';
+  });
+
+  div.innerHTML = html;
+  messages.appendChild(div);
+  messages.scrollIntoView({ block: 'end', behavior: 'smooth' });
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function showThinking() {
+  const div = document.createElement('div');
+  div.className = 'thinking'; div.id = 'thinking';
+  div.innerHTML = '<span></span><span></span><span></span>';
+  messages.appendChild(div);
+  messages.scrollIntoView({ block: 'end', behavior: 'smooth' });
+}
+function hideThinking() {
+  const t = document.getElementById('thinking');
+  if (t) t.remove();
+}
+
+async function sendMessage() {
+  const text = input.value.trim();
+  if (!text || isLoading) return;
+  isLoading = true; sendBtn.disabled = true;
+  addMessage(text, 'user');
+  input.value = ''; input.style.height = 'auto';
+  showThinking();
+
+  try {
+    const url = sessionId === null ? '/api/log/start' : '/api/log/reply';
+    const body = sessionId === null ? { text } : { session_id: sessionId, text };
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await r.json();
+    hideThinking();
+
+    if (!r.ok) {
+      addMessage('something went wrong: ' + (data.detail || 'unknown error'), 'bot');
+    } else {
+      sessionId = data.session_id;
+      if (data.done) {
+        addConfirmation(data.entries || [], data.periods || [], data.message);
+        sessionId = null;
+      } else {
+        addMessage(data.message, 'bot');
+      }
+    }
+  } catch (e) {
+    hideThinking();
+    addMessage('connection error: ' + e.message, 'bot');
+  } finally {
+    isLoading = false; sendBtn.disabled = false;
+    input.focus();
+  }
+}
+
+function switchView(name) {
+  ['log', 'history', 'stats', 'docs', 'chat'].forEach(v => {
+    const el = document.getElementById('view-' + v);
+    if (el) el.classList.toggle('hidden', v !== name);
+    const navEl = document.getElementById('nav-' + v);
+    if (navEl) navEl.classList.toggle('active', v === name);
+  });
+  if (name === 'history') loadHistory();
+  if (name === 'stats') loadStats();
+  if (name === 'docs') loadDocs();
+  if (name === 'chat') {
+    setTimeout(() => document.getElementById('agent-input')?.focus(), 50);
+  }
+}
+
+function severityClass(s) {
+  if (s == null) return '';
+  if (s <= 3) return 'sev-low';
+  if (s <= 6) return 'sev-mid';
+  return 'sev-high';
+}
+
+// ---------- CALENDAR ----------
+let calMonth = (() => {
+  const t = new Date();
+  return { y: t.getFullYear(), m: t.getMonth() };  // m is 0-indexed
+})();
+let calEntries = [];     // cached
+let calPeriods = [];
+
+function isoDate(d) {
+  // local-date YYYY-MM-DD (avoid timezone shifts from toISOString)
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function changeMonth(delta) {
+  calMonth.m += delta;
+  if (calMonth.m < 0) { calMonth.m = 11; calMonth.y -= 1; }
+  else if (calMonth.m > 11) { calMonth.m = 0; calMonth.y += 1; }
+  renderCalendar();
+}
+function goToToday() {
+  const t = new Date();
+  calMonth = { y: t.getFullYear(), m: t.getMonth() };
+  renderCalendar();
+}
+
+async function loadHistory() {
+  const weeks = document.getElementById('cal-weeks');
+  weeks.innerHTML = '<div class="empty-state">loading…</div>';
+  const [entriesRes, periodsRes] = await Promise.all([
+    fetch('/api/entries'),
+    fetch('/api/periods'),
+  ]);
+  calEntries = await entriesRes.json();
+  calPeriods = await periodsRes.json();
+  renderCalendar();
+}
+
+function renderCalendar() {
+  const label = document.getElementById('cal-month-label');
+  const dt = new Date(calMonth.y, calMonth.m, 1);
+  label.textContent = dt.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }).toLowerCase();
+
+  // Build the 6×7 grid (always 42 cells; weeks containing the 1st through last day of month)
+  // First cell = the Sunday of the week containing day 1
+  const firstOfMonth = new Date(calMonth.y, calMonth.m, 1);
+  const startOffset = firstOfMonth.getDay();  // 0 = Sun
+  const gridStart = new Date(firstOfMonth);
+  gridStart.setDate(gridStart.getDate() - startOffset);
+
+  // Determine number of weeks needed (5 or 6)
+  const lastOfMonth = new Date(calMonth.y, calMonth.m + 1, 0);
+  const totalDaysFromStart = startOffset + lastOfMonth.getDate();
+  const numWeeks = Math.ceil(totalDaysFromStart / 7);
+
+  // Group entries by date for this month's visible range.
+  // Multi-day entries (end_date set) appear on every day they span.
+  const entriesByDay = {};
+  for (const e of calEntries) {
+    const startIso = (e.occurred_at || e.created_at).slice(0, 10);
+    const endIso = e.end_date || startIso;
+    let cur = parseLocalDate(startIso);
+    const endDate = parseLocalDate(endIso);
+    while (cur <= endDate) {
+      const iso = isoDate(cur);
+      if (!entriesByDay[iso]) entriesByDay[iso] = [];
+      entriesByDay[iso].push(e);
+      cur.setDate(cur.getDate() + 1);
+    }
+  }
+
+  const todayIso = isoDate(new Date());
+  const weeksEl = document.getElementById('cal-weeks');
+  weeksEl.innerHTML = '';
+
+  // Render each week as its own grid row so period bars can position relative to it
+  for (let w = 0; w < numWeeks; w++) {
+    const weekEl = document.createElement('div');
+    weekEl.className = 'cal-week';
+
+    const weekStart = new Date(gridStart);
+    weekStart.setDate(weekStart.getDate() + w * 7);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+
+    // day cells
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(weekStart);
+      day.setDate(day.getDate() + d);
+      const dayIso = isoDate(day);
+      const inMonth = day.getMonth() === calMonth.m;
+      const isToday = dayIso === todayIso;
+
+      const cell = document.createElement('div');
+      cell.className = 'cal-day' + (inMonth ? '' : ' other-month') + (isToday ? ' today' : '');
+      cell.onclick = () => openDayPanel(dayIso);
+
+      const dayItems = entriesByDay[dayIso] || [];
+      const maxChips = 3;
+      const visible = dayItems.slice(0, maxChips);
+      const overflow = dayItems.length - visible.length;
+
+      let chipsHtml = '<div class="cal-chips">';
+      for (const e of visible) {
+        const label = e.symptoms[0] || e.category;
+        chipsHtml += `<div class="cal-chip cat-${e.category}" title="${escapeHtml(e.category + ': ' + (e.symptoms.join(', ') || '—'))}">${escapeHtml(label)}</div>`;
+      }
+      if (overflow > 0) chipsHtml += `<div class="cal-chip-overflow">+${overflow} more</div>`;
+      chipsHtml += '</div>';
+
+      cell.innerHTML = `<span class="cal-day-num">${day.getDate()}</span>${chipsHtml}`;
+      weekEl.appendChild(cell);
+    }
+
+    // Period bars for this week
+    for (const p of calPeriods) {
+      const ps = parseLocalDate(p.start_date);
+      const peRaw = p.end_date ? parseLocalDate(p.end_date) : null;
+      // Treat ongoing period as extending to today (so the bar reaches the present)
+      const pe = peRaw || new Date();
+
+      // Does this period overlap this week?
+      if (pe < weekStart || ps > weekEnd) continue;
+
+      const segStart = ps < weekStart ? weekStart : ps;
+      const segEnd = pe > weekEnd ? weekEnd : pe;
+
+      const colStart = Math.floor((segStart - weekStart) / (1000 * 60 * 60 * 24));
+      const colEnd = Math.floor((segEnd - weekStart) / (1000 * 60 * 60 * 24));
+      const span = colEnd - colStart + 1;
+
+      const bar = document.createElement('div');
+      bar.className = 'cal-period-bar';
+      if (ps < weekStart) bar.classList.add('continues-left');
+      if (pe > weekEnd && !peRaw) bar.classList.add('ongoing');
+      if (pe > weekEnd) bar.classList.add('continues-right');
+
+      // grid math: 7 columns w/ 6px gap; column N spans (1/7) of (totalWidth - 6*6 gap) plus N gaps offset
+      // Simpler: use percentages assuming gaps are negligible visually, then nudge with calc()
+      const leftPct = (colStart / 7) * 100;
+      const widthPct = (span / 7) * 100;
+      // Account for gap so bars don't overlap into adjacent columns
+      bar.style.left = `calc(${leftPct}% + 4px)`;
+      bar.style.width = `calc(${widthPct}% - 8px)`;
+
+      // Label only on the first segment (no continues-left)
+      if (ps >= weekStart) {
+        const flowText = p.flow ? ` · ${p.flow}` : '';
+        bar.textContent = `period${flowText}`;
+      }
+      bar.onclick = (ev) => { ev.stopPropagation(); openPeriodEdit(p); };
+      bar.style.pointerEvents = 'auto';
+      bar.style.cursor = 'pointer';
+      weekEl.appendChild(bar);
+    }
+
+    weeksEl.appendChild(weekEl);
+  }
+}
+
+function parseLocalDate(iso) {
+  // YYYY-MM-DD → local Date at midnight (avoid UTC shift)
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+// ---------- DAY PANEL ----------
+function openDayPanel(dayIso) {
+  const panel = document.getElementById('day-panel');
+  const content = document.getElementById('day-panel-content');
+  const day = parseLocalDate(dayIso);
+
+  const dayItems = calEntries.filter(e => {
+    const start = parseLocalDate((e.occurred_at || e.created_at).slice(0, 10));
+    const end = e.end_date ? parseLocalDate(e.end_date) : start;
+    const cur = parseLocalDate(dayIso);
+    return cur >= start && cur <= end;
+  });
+  // periods that include this day
+  const dayPeriods = calPeriods.filter(p => {
+    const ps = parseLocalDate(p.start_date);
+    const pe = p.end_date ? parseLocalDate(p.end_date) : new Date();
+    const cur = parseLocalDate(dayIso);
+    return cur >= ps && cur <= pe;
+  });
+
+  const todayIso = isoDate(new Date());
+  let label;
+  if (dayIso === todayIso) label = 'today';
+  else {
+    const t = parseLocalDate(todayIso);
+    t.setDate(t.getDate() - 1);
+    if (isoDate(t) === dayIso) label = 'yesterday';
+    else label = day.toLocaleDateString(undefined, { weekday: 'long' });
+  }
+  const fullDate = day.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
+
+  let html = `<h3>${fullDate}</h3><div class="day-panel-sub">${label}</div>`;
+
+  for (const p of dayPeriods) {
+    const range = p.end_date
+      ? `${p.start_date} → ${p.end_date}`
+      : `${p.start_date} → ongoing`;
+    html += `<div class="period-info">
+      <strong>period${p.flow ? ' · ' + escapeHtml(p.flow) : ''}</strong>
+      ${range}
+      ${p.notes ? `<div style="margin-top:6px;font-style:italic">${escapeHtml(p.notes)}</div>` : ''}
+      <div style="margin-top:8px;display:flex;gap:8px">
+        <button class="entry-delete" onclick="editPeriodEndPrompt(${p.id}, '${p.start_date}', '${p.end_date || ''}')">set end date</button>
+        <button class="entry-delete" onclick="deletePeriod(${p.id})">delete</button>
+      </div>
+    </div>`;
+  }
+
+  if (dayItems.length === 0 && dayPeriods.length === 0) {
+    html += '<div class="empty-state">nothing logged on this day</div>';
+  }
+
+  for (const e of dayItems) {
+    const time = e.occurred_at
+      ? new Date(e.occurred_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+      : '';
+    const meta = [];
+    if (e.foods.length) meta.push(`<span><strong>foods</strong>${escapeHtml(e.foods.join(', '))}</span>`);
+    if (e.triggers.length) meta.push(`<span><strong>triggers</strong>${escapeHtml(e.triggers.join(', '))}</span>`);
+    if (e.location) meta.push(`<span><strong>location</strong>${escapeHtml(e.location)}</span>`);
+    if (e.duration) meta.push(`<span><strong>duration</strong>${escapeHtml(e.duration)}</span>`);
+    if (e.notes) meta.push(`<span><strong>notes</strong>${escapeHtml(e.notes)}</span>`);
+
+    html += `
+      <div class="entry">
+        <div class="entry-head">
+          <div class="entry-head-left">
+            ${time ? `<span class="entry-time">${time}</span>` : ''}
+            <span class="cat-badge cat-${e.category}">${e.category}</span>
+            ${e.severity != null ? `<span class="severity-pill ${severityClass(e.severity)}">severity ${e.severity}</span>` : ''}
+          </div>
+          <div class="entry-head-actions">
+            <button class="entry-delete" onclick="openEditEntry(${e.id})">edit</button>
+            <button class="entry-delete" onclick="deleteEntry(${e.id})">delete</button>
+          </div>
+        </div>
+        <div class="entry-symptoms">${escapeHtml(e.symptoms.join(', ')) || '<em style="color:var(--ink-faint)">(no symptoms noted)</em>'}</div>
+        ${meta.length ? `<div class="entry-meta">${meta.join('')}</div>` : ''}
+        <div class="entry-raw">"${escapeHtml(e.raw_text)}"</div>
+      </div>
+    `;
+  }
+
+  content.innerHTML = html;
+  panel.classList.remove('hidden');
+}
+
+function closeDayPanel() {
+  document.getElementById('day-panel').classList.add('hidden');
+}
+
+async function deleteEntry(id) {
+  if (!confirm('Delete this entry?')) return;
+  await fetch('/api/entries/' + id, { method: 'DELETE' });
+  closeDayPanel();
+  loadHistory();
+}
+
+// ---------- PERIOD EDITING ----------
+function openPeriodEdit(p) {
+  // Quick path: open the day panel for the start date so user has full context
+  openDayPanel(p.start_date);
+}
+
+async function editPeriodEndPrompt(periodId, startDate, currentEnd) {
+  const val = prompt('End date for this period (YYYY-MM-DD), or blank if still ongoing:', currentEnd || '');
+  if (val === null) return;  // cancelled
+  const cleaned = val.trim();
+  if (cleaned && !/^\d{4}-\d{2}-\d{2}$/.test(cleaned)) {
+    alert('Please use YYYY-MM-DD format.');
+    return;
+  }
+  await fetch('/api/periods/' + periodId, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ start_date: startDate, end_date: cleaned || null }),
+  });
+  closeDayPanel();
+  loadHistory();
+}
+
+async function deletePeriod(id) {
+  if (!confirm('Delete this period?')) return;
+  await fetch('/api/periods/' + id, { method: 'DELETE' });
+  closeDayPanel();
+  loadHistory();
+}
+
+// Close panel on Escape
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (!document.getElementById('edit-modal').classList.contains('hidden')) {
+      closeEditModal();
+    } else {
+      closeDayPanel();
+    }
+  }
+});
+
+// ---------- EDIT ENTRY ----------
+let _editingEntryId = null;
+
+function openEditEntry(id) {
+  const e = calEntries.find(x => x.id === id);
+  if (!e) return;
+  _editingEntryId = id;
+
+  document.getElementById('edit-category').value = e.category || 'other';
+  document.getElementById('edit-symptoms').value = e.symptoms.join(', ');
+  document.getElementById('edit-severity').value = e.severity != null ? e.severity : '';
+  document.getElementById('edit-occurred').value = (e.occurred_at || e.created_at).slice(0, 10);
+  document.getElementById('edit-end-date').value = e.end_date || '';
+  document.getElementById('edit-foods').value = e.foods.join(', ');
+  document.getElementById('edit-triggers').value = e.triggers.join(', ');
+  document.getElementById('edit-location').value = e.location || '';
+  document.getElementById('edit-duration').value = e.duration || '';
+  document.getElementById('edit-notes').value = e.notes || '';
+
+  document.getElementById('edit-modal').classList.remove('hidden');
+}
+
+function closeEditModal() {
+  document.getElementById('edit-modal').classList.add('hidden');
+  _editingEntryId = null;
+}
+
+async function saveEditEntry() {
+  if (_editingEntryId == null) return;
+  const splitTrim = s => s.split(',').map(x => x.trim()).filter(Boolean);
+  const sevRaw = document.getElementById('edit-severity').value.trim();
+
+  const body = {
+    occurred_at: document.getElementById('edit-occurred').value || null,
+    end_date: document.getElementById('edit-end-date').value || null,
+    category: document.getElementById('edit-category').value,
+    symptoms: splitTrim(document.getElementById('edit-symptoms').value),
+    severity: sevRaw ? parseInt(sevRaw, 10) : null,
+    location: document.getElementById('edit-location').value.trim() || null,
+    duration: document.getElementById('edit-duration').value.trim() || null,
+    notes: document.getElementById('edit-notes').value.trim() || null,
+    foods: splitTrim(document.getElementById('edit-foods').value),
+    triggers: splitTrim(document.getElementById('edit-triggers').value),
+  };
+
+  await fetch('/api/entries/' + _editingEntryId, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  closeEditModal();
+  closeDayPanel();
+  loadHistory();
+}
+
+async function loadStats() {
+  const r = await fetch('/api/stats');
+  const s = await r.json();
+
+  document.getElementById('stat-count').textContent = s.total_entries;
+  document.getElementById('stat-count-sub').textContent = s.total_entries === 1 ? 'in the last 60 days' : 'in the last 60 days';
+
+  const gutLabels = s.gut_severity_60d.map(d => d.day);
+  const gutVals = s.gut_severity_60d.map(d => d.severity);
+  if (chartGut) chartGut.destroy();
+  chartGut = new Chart(document.getElementById('chart-gut'), {
+    type: 'line',
+    data: {
+      labels: gutLabels,
+      datasets: [{
+        data: gutVals,
+        borderColor: CATEGORY_COLORS.gut,
+        backgroundColor: 'rgba(217, 107, 90, 0.15)',
+        borderWidth: 2,
+        pointRadius: gutVals.map(v => v > 0 ? 3 : 0),
+        pointBackgroundColor: CATEGORY_COLORS.gut,
+        pointBorderColor: '#1c1a16',
+        pointBorderWidth: 1,
+        tension: 0.25,
+        fill: true,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#0a0908',
+          titleColor: '#f4ede0',
+          bodyColor: '#b8ad9a',
+          borderColor: '#2a2620',
+          borderWidth: 1,
+          padding: 10,
+          titleFont: { family: 'Fraunces', size: 13 },
+          bodyFont: { family: 'JetBrains Mono', size: 11 },
+          callbacks: {
+            title: items => new Date(items[0].label + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }),
+            label: ctx => 'severity: ' + ctx.parsed.y + '/10',
+          },
+        },
+      },
+      scales: {
+        y: {
+          min: 0, max: 10,
+          ticks: { stepSize: 2, color: '#6e6557', font: { family: 'JetBrains Mono', size: 10 } },
+          grid: { color: '#221f1a' },
+          border: { color: '#2a2620' },
+        },
+        x: {
+          ticks: {
+            color: '#6e6557', font: { family: 'JetBrains Mono', size: 10 },
+            maxRotation: 0, autoSkip: true, maxTicksLimit: 8,
+            callback: function(v) {
+              const d = new Date(this.getLabelForValue(v) + 'T12:00:00');
+              return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+            },
+          },
+          grid: { display: false },
+          border: { color: '#2a2620' },
+        },
+      },
+    },
+  });
+
+  const catEntries = Object.entries(s.category_counts);
+  if (chartCategories) chartCategories.destroy();
+  const catCanvas = document.getElementById('chart-categories');
+  if (catEntries.length === 0) {
+    catCanvas.parentElement.innerHTML = '<div class="empty-state" style="padding:20px">no data yet</div>';
+  } else {
+    chartCategories = new Chart(catCanvas, {
+      type: 'doughnut',
+      data: {
+        labels: catEntries.map(([k]) => k),
+        datasets: [{
+          data: catEntries.map(([, v]) => v),
+          backgroundColor: catEntries.map(([k]) => CATEGORY_COLORS[k] || CATEGORY_COLORS.other),
+          borderColor: '#1c1a16',
+          borderWidth: 2,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'right',
+            labels: {
+              color: '#b8ad9a',
+              font: { family: 'Fraunces', size: 12 },
+              boxWidth: 10, boxHeight: 10, padding: 8,
+            },
+          },
+          tooltip: {
+            backgroundColor: '#0a0908',
+            titleColor: '#f4ede0',
+            bodyColor: '#b8ad9a',
+            borderColor: '#2a2620',
+            borderWidth: 1,
+          },
+        },
+      },
+    });
+  }
+
+  renderList('stat-foods', s.top_foods);
+  renderList('stat-triggers', s.top_triggers);
+  renderList('stat-symptoms', s.top_symptoms);
+
+  // ---- correlations chart ----
+  renderCorrelations(s);
+  renderCalmFoods(s.calm_day_foods || []);
+}
+
+function renderCorrelations(s) {
+  const worst = s.worst_offenders || [];
+  const empty = document.getElementById('corr-empty');
+  const wrap = document.getElementById('chart-corr-wrap');
+  const canvas = document.getElementById('chart-correlations');
+  const sub = document.getElementById('corr-sub');
+
+  if (chartCorrelations) { chartCorrelations.destroy(); chartCorrelations = null; }
+
+  if (worst.length === 0) {
+    canvas.style.display = 'none';
+    empty.classList.remove('hidden');
+    return;
+  }
+  canvas.style.display = 'block';
+  empty.classList.add('hidden');
+
+  // Update subtitle with baseline
+  if (s.baseline_severity > 0) {
+    sub.innerHTML = `Avg gut severity on days you ate / suspected each item (incl. next-day), ` +
+      `vs your baseline of <strong style="color: var(--ink); font-style: normal;">${s.baseline_severity}/10</strong>. ` +
+      `Last 90 days, min 2 occurrences.`;
+  }
+
+  // Height scales with bar count so labels stay legible
+  const barCount = worst.length;
+  wrap.style.height = (44 + barCount * 32) + 'px';
+
+  const labels = worst.map(w => w.item);
+  const data = worst.map(w => w.avg_severity);
+  // Color by severity intensity
+  const colors = data.map(v => {
+    if (v >= 7) return CATEGORY_COLORS.gut;       // red
+    if (v >= 5) return '#d4a259';                 // amber
+    return '#8a9cb0';                              // muted blue
+  });
+
+  chartCorrelations = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'avg severity',
+        data: data,
+        backgroundColor: colors,
+        borderColor: colors,
+        borderWidth: 0,
+        borderRadius: 4,
+        barThickness: 18,
+      }],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#0a0908',
+          titleColor: '#f4ede0',
+          bodyColor: '#b8ad9a',
+          borderColor: '#2a2620',
+          borderWidth: 1,
+          padding: 10,
+          titleFont: { family: 'Fraunces', size: 13 },
+          bodyFont: { family: 'JetBrains Mono', size: 11 },
+          callbacks: {
+            title: items => items[0].label,
+            label: ctx => {
+              const w = worst[ctx.dataIndex];
+              const deltaStr = w.delta > 0 ? `+${w.delta}` : w.delta;
+              return [
+                `avg severity: ${w.avg_severity}/10`,
+                `vs baseline: ${deltaStr}`,
+                `${w.scored_days} of ${w.occurrences} days had gut symptoms`,
+                `kind: ${w.kind}`,
+              ];
+            },
+          },
+        },
+        // Baseline reference line via a small custom plugin
+        annotation: false,
+      },
+      scales: {
+        x: {
+          min: 0, max: 10,
+          ticks: {
+            stepSize: 2,
+            color: '#6e6557',
+            font: { family: 'JetBrains Mono', size: 10 },
+          },
+          grid: { color: '#221f1a' },
+          border: { color: '#2a2620' },
+        },
+        y: {
+          ticks: {
+            color: '#b8ad9a',
+            font: { family: 'Fraunces', size: 13 },
+            // Append a small "T" or "F" hint via callback
+            callback: function(v) {
+              const w = worst[v];
+              if (!w) return '';
+              const prefix = w.kind === 'trigger' ? '⚠ ' : '';
+              return prefix + w.item;
+            },
+          },
+          grid: { display: false },
+          border: { color: '#2a2620' },
+        },
+      },
+    },
+    // Inline plugin: draw baseline reference line
+    plugins: [{
+      id: 'baseline-line',
+      afterDatasetsDraw(chart) {
+        const baseline = s.baseline_severity;
+        if (!baseline) return;
+        const { ctx, chartArea, scales } = chart;
+        const x = scales.x.getPixelForValue(baseline);
+        ctx.save();
+        ctx.strokeStyle = 'rgba(244, 237, 224, 0.35)';
+        ctx.setLineDash([4, 4]);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x, chartArea.top);
+        ctx.lineTo(x, chartArea.bottom);
+        ctx.stroke();
+        // label
+        ctx.fillStyle = '#a39a8e';
+        ctx.font = '10px "JetBrains Mono", monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText(`baseline ${baseline}`, x + 4, chartArea.top + 10);
+        ctx.restore();
+      },
+    }],
+  });
+}
+
+function renderCalmFoods(items) {
+  const el = document.getElementById('stat-calm');
+  if (!items.length) {
+    el.innerHTML = '<li><em style="color:var(--ink-faint)">need more data — log foods on calm days too</em></li>';
+    return;
+  }
+  el.innerHTML = items.map(c => {
+    const deltaStr = c.delta < 0 ? c.delta : '0';
+    return `<li>
+      <div class="item-row">
+        <span class="kind-pill kind-${c.kind}">${c.kind}</span>
+        <span>${escapeHtml(c.item)}</span>
+      </div>
+      <span class="count">${c.avg_severity}/10 · ${c.scored_days}d</span>
+    </li>`;
+  }).join('');
+}
+
+function renderList(id, items) {
+  const el = document.getElementById(id);
+  el.innerHTML = items.length
+    ? items.map(([k, v]) => `<li><span>${escapeHtml(k)}</span><span class="count">${v}×</span></li>`).join('')
+    : '<li><em style="color:var(--ink-faint)">none yet</em></li>';
+}
+
+// ============ DOCUMENTS ============
+async function uploadDocument() {
+  const fileInput = document.getElementById('upload-file');
+  const typeSel = document.getElementById('upload-type');
+  const dateInput = document.getElementById('upload-date');
+  const statusEl = document.getElementById('upload-status');
+  const btn = document.getElementById('upload-btn');
+
+  if (!fileInput.files.length) {
+    statusEl.textContent = 'pick a file first';
+    statusEl.className = 'upload-status error';
+    return;
+  }
+  const file = fileInput.files[0];
+  const form = new FormData();
+  form.append('file', file);
+  form.append('source_type', typeSel.value);
+  if (dateInput.value) form.append('doc_date', dateInput.value);
+
+  btn.disabled = true;
+  statusEl.className = 'upload-status';
+  statusEl.textContent = 'uploading and indexing... (may take 10-30s for PDFs)';
+
+  try {
+    const r = await fetch('/api/documents/upload', { method: 'POST', body: form });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || 'upload failed');
+    statusEl.textContent = `✓ indexed: ${data.filename}`;
+    statusEl.className = 'upload-status success';
+    fileInput.value = '';
+    dateInput.value = '';
+    loadDocs();
+  } catch (e) {
+    statusEl.textContent = '✗ ' + e.message;
+    statusEl.className = 'upload-status error';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function loadDocs() {
+  const list = document.getElementById('docs-list');
+  list.innerHTML = '<div class="empty-state" style="padding:20px">loading…</div>';
+  const r = await fetch('/api/documents');
+  const docs = await r.json();
+  if (!docs.length) {
+    list.innerHTML = '<div class="empty-state" style="padding:20px">no documents indexed yet. upload one above.</div>';
+    return;
+  }
+  list.innerHTML = docs.map(d => `
+    <div class="doc-card">
+      <div class="doc-card-main">
+        <div class="doc-card-title">${escapeHtml(d.title || d.filename)}</div>
+        ${d.summary ? `<div class="doc-card-summary">${escapeHtml(d.summary)}</div>` : ''}
+        <div class="doc-card-meta">
+          <span class="doc-type-pill">${escapeHtml(d.source_type)}</span>
+          <span>${escapeHtml(d.filename)}</span>
+          ${d.doc_date ? `<span>date: ${escapeHtml(d.doc_date)}</span>` : ''}
+          ${d.page_count ? `<span>${d.page_count} pages</span>` : ''}
+          <span>uploaded ${new Date(d.uploaded_at).toLocaleDateString()}</span>
+        </div>
+      </div>
+      <button class="entry-delete" onclick="deleteDoc(${d.id})">delete</button>
+    </div>
+  `).join('');
+}
+
+async function deleteDoc(id) {
+  if (!confirm('Delete this document and its embeddings?')) return;
+  await fetch('/api/documents/' + id, { method: 'DELETE' });
+  loadDocs();
+}
+
+// ============ AGENT CHAT ============
+let agentSessionId = null;
+let agentIsLoading = false;
+
+const agentInput = document.getElementById('agent-input');
+const agentSendBtn = document.getElementById('agent-send');
+const agentMessages = document.getElementById('agent-messages');
+
+agentInput.addEventListener('input', () => {
+  agentInput.style.height = 'auto';
+  agentInput.style.height = Math.min(agentInput.scrollHeight, 220) + 'px';
+});
+agentInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAgentMessage(); }
+});
+
+function addAgentMessage(text, cls) {
+  const empty = document.getElementById('agent-empty');
+  if (empty) empty.remove();
+  const div = document.createElement('div');
+  div.className = 'msg ' + cls;
+  div.textContent = text;
+  agentMessages.appendChild(div);
+  agentMessages.scrollIntoView({ block: 'end', behavior: 'smooth' });
+  return div;
+}
+
+function addAgentResponse(answer, trace, citations) {
+  const empty = document.getElementById('agent-empty');
+  if (empty) empty.remove();
+  const wrap = document.createElement('div');
+  wrap.className = 'msg bot';
+  wrap.style.whiteSpace = 'pre-wrap';
+  wrap.textContent = answer;
+
+  if (trace && trace.length) {
+    const t = document.createElement('div');
+    t.className = 'agent-trace';
+    t.innerHTML = trace.map(step => {
+      const name = step.agent || '?';
+      let detail = '';
+      if (step.input) {
+        if (step.input.query) detail = `"${escapeHtml(step.input.query)}"`;
+        else if (step.input.analysis) detail = step.input.analysis;
+      }
+      return `<div class="agent-trace-step"><span class="agent-name">${name}</span><span>${detail}</span></div>`;
+    }).join('');
+    wrap.appendChild(t);
+  }
+
+  if (citations && citations.length) {
+    const c = document.createElement('div');
+    c.className = 'citations';
+    c.innerHTML = '<div class="citations-label">sources</div>' +
+      citations.map(ct => {
+        const date = ct.doc_date ? ` · ${ct.doc_date}` : '';
+        const page = ct.page ? ` · p.${ct.page}` : '';
+        return `<div class="citation">
+          <div class="citation-head">${escapeHtml(ct.title || ct.filename)}${date}${page}</div>
+          <div class="citation-snippet">${escapeHtml(ct.snippet)}…</div>
+        </div>`;
+      }).join('');
+    wrap.appendChild(c);
+  }
+
+  agentMessages.appendChild(wrap);
+  agentMessages.scrollIntoView({ block: 'end', behavior: 'smooth' });
+}
+
+function showAgentThinking() {
+  const div = document.createElement('div');
+  div.className = 'thinking'; div.id = 'agent-thinking';
+  div.innerHTML = '<span></span><span></span><span></span>';
+  agentMessages.appendChild(div);
+  agentMessages.scrollIntoView({ block: 'end', behavior: 'smooth' });
+}
+function hideAgentThinking() {
+  document.getElementById('agent-thinking')?.remove();
+}
+
+async function sendAgentMessage() {
+  const text = agentInput.value.trim();
+  if (!text || agentIsLoading) return;
+  agentIsLoading = true; agentSendBtn.disabled = true;
+  addAgentMessage(text, 'user');
+  agentInput.value = ''; agentInput.style.height = 'auto';
+  showAgentThinking();
+  try {
+    const r = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: agentSessionId, message: text }),
+    });
+    const data = await r.json();
+    hideAgentThinking();
+    if (!r.ok) {
+      addAgentMessage('error: ' + (data.detail || 'something went wrong'), 'bot');
+    } else {
+      agentSessionId = data.session_id;
+      addAgentResponse(data.answer, data.agent_trace, data.citations);
+    }
+  } catch (e) {
+    hideAgentThinking();
+    addAgentMessage('connection error: ' + e.message, 'bot');
+  } finally {
+    agentIsLoading = false; agentSendBtn.disabled = false;
+    agentInput.focus();
+  }
+}
+
+input.focus();
+</script>
+</body>
+</html>
