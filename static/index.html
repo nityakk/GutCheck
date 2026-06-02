@@ -183,6 +183,14 @@
     max-width: 720px;
     margin: 0 auto;
   }
+  .page-content.wide {
+    max-width: 1100px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .page-content.wide .stat-card { margin-bottom: 0; }
+  .page-content.wide h2 { margin-bottom: 0; }
   .page-title {
     font-size: 28px;
     font-weight: 400;
@@ -859,7 +867,37 @@
   .stats-grid-two {
     display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
   }
-  @media (max-width: 640px) { .stats-grid-two { grid-template-columns: 1fr; } }
+  .stats-grid-four {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
+  }
+  .stats-grid-main {
+    display: grid; grid-template-columns: 2fr 1fr; gap: 14px; align-items: stretch;
+  }
+  .stats-grid-main .stats-right {
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .stat-card-compact { padding: 14px 18px; }
+  .entries-stat {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  }
+  .entries-stat-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.09em; color: var(--ink-faint);
+    line-height: 1.6;
+  }
+  .entries-stat-label em {
+    display: block; text-transform: none; letter-spacing: 0;
+    font-style: italic; opacity: 0.8;
+  }
+  @media (max-width: 900px) {
+    .stats-grid-main { grid-template-columns: 1fr; }
+    .stats-grid-four { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 640px) {
+    .stats-grid-two { grid-template-columns: 1fr; }
+    .stats-grid-four { grid-template-columns: 1fr; }
+  }
   .stat-big {
     font-size: 42px; font-weight: 500;
     letter-spacing: -0.02em; font-variation-settings: "opsz" 144;
@@ -1086,11 +1124,26 @@
 
     <!-- STATS VIEW -->
     <section id="view-stats" class="hidden">
-      <div class="page-content">
+      <div class="page-content wide">
         <h2 class="page-title">trends<em>last 60 days</em></h2>
-        <div class="stat-card">
-          <h3>gut issue severity</h3>
-          <div class="chart-wrap"><canvas id="chart-gut"></canvas></div>
+
+        <div class="stats-grid-main">
+          <div class="stat-card">
+            <h3>gut issue severity</h3>
+            <div class="chart-wrap"><canvas id="chart-gut"></canvas></div>
+          </div>
+          <div class="stats-right">
+            <div class="stat-card stat-card-compact">
+              <div class="entries-stat">
+                <div class="entries-stat-label">entries logged<em>in the last 60 days</em></div>
+                <div class="stat-big" id="stat-count">—</div>
+              </div>
+            </div>
+            <div class="stat-card stat-card-compact">
+              <h3>by category</h3>
+              <div class="chart-wrap short"><canvas id="chart-categories"></canvas></div>
+            </div>
+          </div>
         </div>
 
         <div class="stat-card">
@@ -1107,19 +1160,7 @@
           </div>
         </div>
 
-        <div class="stats-grid-two">
-          <div class="stat-card">
-            <h3>entries logged</h3>
-            <div class="stat-big" id="stat-count">—</div>
-            <div class="stat-big-sub" id="stat-count-sub"></div>
-          </div>
-          <div class="stat-card">
-            <h3>by category</h3>
-            <div class="chart-wrap short"><canvas id="chart-categories"></canvas></div>
-          </div>
-        </div>
-
-        <div class="stats-grid-two">
+        <div class="stats-grid-four">
           <div class="stat-card">
             <h3>top foods · most logged</h3>
             <ul class="stat-list" id="stat-foods"></ul>
@@ -1129,9 +1170,6 @@
             <div class="card-sub">Items that appear most on your better days.</div>
             <ul class="stat-list" id="stat-calm"></ul>
           </div>
-        </div>
-
-        <div class="stats-grid-two">
           <div class="stat-card">
             <h3>top triggers · most suspected</h3>
             <ul class="stat-list" id="stat-triggers"></ul>
@@ -1742,7 +1780,6 @@ async function loadStats() {
   const s = await r.json();
 
   document.getElementById('stat-count').textContent = s.total_entries;
-  document.getElementById('stat-count-sub').textContent = s.total_entries === 1 ? 'in the last 60 days' : 'in the last 60 days';
 
   const gutLabels = s.gut_severity_60d.map(d => d.day);
   const gutVals = s.gut_severity_60d.map(d => d.severity);
